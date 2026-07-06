@@ -1,1 +1,0 @@
-<h2><a href="https://leetcode.com/problems/combine-two-tables">0000. combine-two-tables</a></h2><h3>Unknown</h3><hr><br>Description could not be scraped.
