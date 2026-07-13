@@ -1,6 +1,5 @@
 import os
 import re
-import json
 import subprocess
 from datetime import datetime
 from collections import defaultdict
@@ -26,7 +25,7 @@ EXT_MAP = {
 }
 
 def get_git_history():
-    """Fetches git log to calculate streaks and dates."""
+    """Fetches full git log to calculate streaks and dates."""
     try:
         result = subprocess.run(
             ['git', 'log', '--name-status', '--format=%H|%aI|%s'], 
@@ -35,6 +34,17 @@ def get_git_history():
         return result.stdout.strip().split('\n')
     except subprocess.CalledProcessError:
         return []
+
+def get_last_commit_for_folder(folder_path):
+    """Fetches the latest commit specifically for a given folder."""
+    try:
+        result = subprocess.run(
+            ['git', 'log', '-1', '--format=%H|%aI|%s', '--', folder_path], 
+            capture_output=True, text=True, check=True
+        )
+        return result.stdout.strip()
+    except subprocess.CalledProcessError:
+        return ""
 
 def get_problem_metadata(slug):
     """Fetches problem difficulty from LeetCode GraphQL API."""
@@ -85,11 +95,18 @@ def parse_directories():
                 total_algo += 1
                 
             if problem_langs:
+                commit_info = get_last_commit_for_folder(item)
+                date_val = ""
+                if commit_info and '|' in commit_info:
+                    date_val = commit_info.split('|')[1]
+                    
                 problems.append({
                     'folder': item,
                     'slug': slug,
                     'langs': problem_langs,
-                    'is_sql': is_sql
+                    'is_sql': is_sql,
+                    'last_commit_info': commit_info,
+                    'last_commit_date': date_val
                 })
                 
     return problems, languages, total_sql, total_algo
@@ -100,7 +117,7 @@ def calculate_streaks(git_lines):
         if '|' in line:
             parts = line.split('|')
             if len(parts) >= 2:
-                date_str = parts[1][:10] # YYYY-MM-DD
+                date_str = parts[1][:10] 
                 dates.add(datetime.strptime(date_str, '%Y-%m-%d').date())
     
     if not dates:
@@ -124,7 +141,6 @@ def calculate_streaks(git_lines):
     if temp_streak > longest_streak:
         longest_streak = temp_streak
         
-    # Check current streak
     if sorted_dates and (datetime.now().date() - sorted_dates[-1]).days <= 1:
         current_streak = temp_streak
         
@@ -152,6 +168,9 @@ def main():
     git_lines = get_git_history()
     commits = [line for line in git_lines if '|' in line]
     current_streak, longest_streak, repo_age = calculate_streaks(git_lines)
+    
+    # Sort problems by their actual folder commit date (newest first)
+    problems.sort(key=lambda x: x['last_commit_date'], reverse=True)
     
     # Calculate Languages HTML
     lang_html = ""
@@ -182,7 +201,7 @@ def main():
         if '|' in line:
             parts = line.split('|')
             if len(parts) >= 2:
-                ym = parts[1][:7] # YYYY-MM
+                ym = parts[1][:7] 
                 timeline_counts[ym] += 1
                 
     timeline_html = ""
@@ -192,22 +211,23 @@ def main():
         bars = '█' * min(timeline_counts[ym], 30)
         timeline_html += f"**{month_name}** {bars} ({timeline_counts[ym]})\n\n"
         
-    # Latest Problem
+    # Latest Problem Fix
     latest_problem = "Pending"
     latest_diff = "-"
     latest_lang = "-"
     latest_date = "-"
     latest_hash = "-"
     latest_msg = "-"
-    if commits:
-        latest = commits[0].split('|')
-        latest_hash = latest[0][:7]
-        latest_date = latest[1].replace('T', ' ')[:19]
-        latest_msg = latest[2]
-        if problems:
-            latest_problem = problems[-1]['folder']
-            latest_diff = problems[-1]['difficulty']
-            latest_lang = ", ".join(problems[-1]['langs'])
+    
+    if problems and problems[0].get('last_commit_info'):
+        latest = problems[0]['last_commit_info'].split('|')
+        if len(latest) >= 3:
+            latest_hash = latest[0][:7]
+            latest_date = latest[1].replace('T', ' ')[:19]
+            latest_msg = latest[2]
+            latest_problem = problems[0]['folder']
+            latest_diff = problems[0].get('difficulty', '-')
+            latest_lang = ", ".join(problems[0]['langs'])
 
     # Build placeholders
     placeholders = {
