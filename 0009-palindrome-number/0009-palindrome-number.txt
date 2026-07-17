@@ -1,0 +1,23 @@
+bool isPalindrome(int x) {
+    long int rev=0;
+    for (int i=x;i>0;){
+        rev=((rev*10)+i%10);
+        i=i/10;
+    }
+    if (rev==x){
+        return true;
+    }
+    else {
+        return false;
+    }
+
+}
+121
+-121
+10
+true
+false
+false
+true
+false
+false
